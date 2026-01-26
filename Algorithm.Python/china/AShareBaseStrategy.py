@@ -199,7 +199,7 @@ class AShareBaseStrategy(QCAlgorithm):
                 if holdings.Invested:
                     cursor.execute(
                         "INSERT INTO holdings (timestamp, symbol, quantity, cost_price, current_price, profit_loss_percent) VALUES (?, ?, ?, ?, ?, ?)",
-                        (timestamp, symbol, int(holdings.Quantity),
+                        (timestamp, str(symbol), int(holdings.Quantity),
                          holdings.AveragePrice, holdings.Price,
                          holdings.UnrealizedProfitPercent * 100)
                     )
