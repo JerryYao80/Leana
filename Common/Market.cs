@@ -71,7 +71,8 @@ namespace QuantConnect
             Tuple.Create(InteractiveBrokers, 39),
             Tuple.Create(EUREX, 40),
             Tuple.Create(OSE, 41),
-            Tuple.Create(DYDX, 42)
+            Tuple.Create(DYDX, 42),
+            Tuple.Create(China, 43)
         };
 
         static Market()
@@ -266,6 +267,16 @@ namespace QuantConnect
         /// dYdX market
         /// </summary>
         public const string DYDX = "dydx";
+
+        /// <summary>
+        /// China A-Share market
+        /// </summary>
+        public const string China = "china";
+
+        /// <summary>
+        /// China A-Share market (alias)
+        /// </summary>
+        public const string ChinaA = "china-a";
 
         /// <summary>
         /// Adds the specified market to the map of available markets with the specified identifier.

@@ -1,0 +1,31 @@
+{
+  "environment": "backtesting-a-share",
+  "algorithm-type-name": "AShareSimpleStrategy",
+  "algorithm-language": "Python",
+  "algorithm-location": "../Algorithm.Python/AShareSimpleStrategy.py",
+
+  "data-folder": "/home/project/ccleana/data",
+  "python-venv": "/root/miniconda3/envs/quant311",
+
+  "description": "A股回测配置",
+  "live-mode": false,
+
+  "python-additional-paths": ["../Common"],
+
+  "environments": {
+    "backtesting-a-share": {
+      "live-mode": false,
+      "setup-handler": "QuantConnect.Lean.Engine.Setup.BacktestingSetupHandler",
+      "result-handler": "QuantConnect.Lean.Engine.Results.BacktestingResultHandler",
+      "data-feed-handler": "QuantConnect.Lean.Engine.DataFeeds.FileSystemDataFeed",
+      "real-time-handler": "QuantConnect.Lean.Engine.RealTime.BacktestingRealTimeHandler",
+      "history-provider": ["QuantConnect.Lean.Engine.HistoricalData.SubscriptionDataReaderHistoryProvider"],
+      "transaction-handler": "QuantConnect.Lean.Engine.TransactionHandlers.BacktestingTransactionHandler"
+    }
+  },
+
+  "log-handler": "QuantConnect.Logging.CompositeLogHandler",
+  "parameters": {
+    "log-process": true
+  }
+}
