@@ -12,8 +12,21 @@
 # limitations under the License.
 
 from AlgorithmImports import *
+import sys
+import os
 
-class AShareSimpleStrategy(QCAlgorithm):
+# 动态导入基类（兼容LEAN的模块系统）
+_base_path = os.path.dirname(os.path.abspath(__file__))
+if _base_path not in sys.path:
+    sys.path.insert(0, _base_path)
+
+from AShareBaseStrategy import AShareBaseStrategy
+
+### <summary>
+### A股简单策略
+### 继承自AShareBaseStrategy，自动获得交易信号记录功能
+### </summary>
+class AShareSimpleStrategy(AShareBaseStrategy):
     """
     A股简单策略示例
     演示A股市场的T+1规则、涨跌停限制、100股交易单位等特性
@@ -26,17 +39,27 @@ class AShareSimpleStrategy(QCAlgorithm):
         self.SetEndDate(2024, 12, 31)
         self.SetCash(1000000)  # 初始资金100万CNY
 
+        # 设置时区为中国时区
+        self.SetTimeZone("Asia/Shanghai")
+
         # 添加A股股票
-        # 000001.SZ - 平安银行（深圳交易所）
-        # 600000.SH - 浦发银行（上海交易所）
-        self.AddEquity("000001", Resolution.Daily)
-        self.AddEquity("600000", Resolution.Daily)
+        # 000001 - 平安银行（深圳交易所）
+        # 600000 - 浦发银行（上海交易所）
+        self.AddEquity("000001", Resolution.Daily, Market.China)
+        self.AddEquity("600000", Resolution.Daily, Market.China)
+
+        # 设置A股费用模型：使用5元固定费用作为交易成本
+        for symbol in ["000001", "600000"]:
+            self.Securities[symbol].FeeModel = ConstantFeeModel(5)
 
         # 设置Warmup预热期
         self.SetWarmUp(TimeSpan.FromDays(30))
 
         # 设置Benchmark
         self.SetBenchmark("000001")
+
+        # 初始化交易信号记录器（继承自AShareBaseStrategy）
+        self._init_signal_recorder()
 
         # 输出策略信息
         self.Log(f"策略初始化完成 - 初始资金: 1000000 CNY")
@@ -46,6 +69,10 @@ class AShareSimpleStrategy(QCAlgorithm):
         数据更新事件处理
         当有新数据到达时调用
         """
+        # 预热期内不交易
+        if self.IsWarmingUp:
+            return
+
         # 只在交易日执行
         if not self.Time.day == self.UtcTime.day:
             return
@@ -61,10 +88,11 @@ class AShareSimpleStrategy(QCAlgorithm):
         # 检查是否已投资
         if not self.Portfolio.Invested:
             # 第一次买入 - 买入100股（A股最小交易单位）
-            self.Log(f"{self.Time} - 首次买入 000001 @ {price_000001:CNY}, 100股")
+            # 使用基类提供的信号记录方法
+            self._record_trading_signal("000001", "买入", 100, price_000001)
             self.MarketOrder("000001", 100)
 
-            self.Log(f"{self.Time} - 首次买入 600000 @ {price_600000:CNY}, 100股")
+            self._record_trading_signal("600000", "买入", 100, price_600000)
             self.MarketOrder("600000", 100)
 
         else:
@@ -72,25 +100,27 @@ class AShareSimpleStrategy(QCAlgorithm):
             holdings_000001 = self.Portfolio["000001"]
             holdings_600000 = self.Portfolio["600000"]
 
-            # T+1规则测试：尝试当天买入后卖出（应该失败）
-            if holdings_000001.Invested and holdings_000001.UnrealizedProfitPercent > 0.05:
-                # 尝试卖出 - 如果是当天买入的，会被T+1规则拒绝
-                self.Log(f"{self.Time} - 尝试卖出 000001 (持仓: {holdings_000001.Quantity}股)")
-                self.MarketOrder("000001", -100)
-
-            # 简单的均值回归策略
+            # 简单的均值回归策略 - 000001
             if holdings_000001.Invested:
-                # 如果涨幅超过10%，考虑卖出（注意涨跌停限制）
-                if holdings_000001.UnrealizedProfitPercent > 0.10:
-                    self.Log(f"{self.Time} - 涨幅超过10%，考虑卖出 000001")
-                    # 注意：涨停时无法卖出
-                    if data["000001"].Price < holdings_000001.AveragePrice * 1.10:
-                        self.MarketOrder("000001", -100)
+                # 如果涨幅超过3%，止盈卖出
+                if holdings_000001.UnrealizedProfitPercent > 0.03:
+                    self._record_trading_signal("000001", "卖出", 100, price_000001)
+                    self.MarketOrder("000001", -100)
 
-                # 如果跌幅超过5%，考虑补仓
-                elif holdings_000001.UnrealizedProfitPercent < -0.05:
-                    self.Log(f"{self.Time} - 跌幅超过5%，考虑补仓 000001")
+                # 如果跌幅超过3%，补仓
+                elif holdings_000001.UnrealizedProfitPercent < -0.03:
+                    self._record_trading_signal("000001", "买入", 100, price_000001)
                     self.MarketOrder("000001", 100)
+
+            # 600000同样逻辑
+            if holdings_600000.Invested:
+                if holdings_600000.UnrealizedProfitPercent > 0.03:
+                    self._record_trading_signal("600000", "卖出", 100, price_600000)
+                    self.MarketOrder("600000", -100)
+
+                elif holdings_600000.UnrealizedProfitPercent < -0.03:
+                    self._record_trading_signal("600000", "买入", 100, price_600000)
+                    self.MarketOrder("600000", 100)
 
     def OnOrderEvent(self, orderEvent):
         """
@@ -98,29 +128,12 @@ class AShareSimpleStrategy(QCAlgorithm):
         """
         if orderEvent.Status == OrderStatus.Filled:
             self.Log(f"订单成交: {orderEvent.Symbol} " +
-                    f"数量: {orderEvent.FillQuantity} " +
-                    f"价格: {orderEvent.FillPrice:CNY} " +
-                    f"费用: {orderEvent.OrderFee.Value.Amount:CNY}")
+                    f"数量: {int(orderEvent.FillQuantity)} " +
+                    f"价格: {orderEvent.FillPrice:.2f} CNY " +
+                    f"费用: {orderEvent.OrderFee.Value.Amount:.2f} CNY")
 
         elif orderEvent.Status == OrderStatus.Invalid:
             self.Log(f"订单被拒绝: {orderEvent.Symbol} - {orderEvent.Message}")
 
         elif orderEvent.Status == OrderStatus.Canceled:
             self.Log(f"订单取消: {orderEvent.Symbol}")
-
-    def OnEndOfDay(self):
-        """
-        每日收盘后调用
-        """
-        # 输出当日持仓情况
-        self.Log(f"=== {self.Time} 收盘 ===")
-        for symbol, holdings in self.Portfolio.items():
-            if holdings.Invested:
-                self.Log(f"{symbol} 持仓: {holdings.Quantity}股, " +
-                        f"成本: {holdings.AveragePrice:CNY}, " +
-                        f"现价: {holdings.Price:CNY}, " +
-                        f"盈亏: {holdings.UnrealizedProfitPercent:P2}")
-
-        # 输出账户总览
-        self.Log(f"总资产: {self.Portfolio.TotalPortfolioValue:CNY}")
-        self.Log(f"可用资金: {self.Portfolio.CashBook[Currencies.CNY].Amount:CNY}")
