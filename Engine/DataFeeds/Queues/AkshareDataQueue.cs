@@ -52,9 +52,9 @@ namespace QuantConnect.Lean.Engine.DataFeeds.Queues
 
         /// <summary>
         /// 数据获取间隔（毫秒）
-        /// 默认60秒（1分钟）
+        /// 默认300秒（5分钟），防止被封锁IP
         /// </summary>
-        public int DataFetchInterval { get; set; } = 60000;
+        public int DataFetchInterval { get; set; } = 300000;
 
         /// <summary>
         /// 是否已连接
@@ -206,8 +206,9 @@ namespace QuantConnect.Lean.Engine.DataFeeds.Queues
                     // stock_zh_a_spot_em(): 获取A股实时行情数据
                     var df = _akshare.stock_zh_a_spot_em();
 
-                    // 检查数据是否为空
-                    long rowCount = _pd.DataFrame.len(df);
+                    // 检查数据是否为空 - 使用 Python 内置的 len() 函数
+                    PyObject lenFunc = _pd.Builtins.len();
+                    long rowCount = lenFunc.Invoke(df).As<long>();
                     if (rowCount == 0)
                     {
                         Log.Trace("AkshareDataQueue.FetchLatestData: 没有获取到实时数据");

@@ -7,7 +7,7 @@
   "data-folder": "/home/project/ccleana/data",
   "python-venv": "/root/miniconda3/envs/quant311",
 
-  "live-cash-balance": "CNY:1000000",
+  "live-cash-balance": "[{\"Amount\": 1000000, \"Currency\": \"CNY\"}]",
   "live-holdings": "[]",
 
   "description": "A股实盘Paper模式配置",
@@ -28,7 +28,7 @@
       "real-time-handler": "QuantConnect.Lean.Engine.RealTime.LiveTradingRealTimeHandler",
       "transaction-handler": "QuantConnect.Lean.Engine.TransactionHandlers.BacktestingTransactionHandler",
       "history-provider": [
-        "QuantConnect.Lean.Engine.HistoricalData.AkshareHistoryProvider"
+        "SubscriptionDataReaderHistoryProvider"
       ]
     }
   },

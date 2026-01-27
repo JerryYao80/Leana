@@ -558,3 +558,47 @@ Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
 2024-12-31 15:00:00 订单成交: 000001 数量: -100 价格: 11.57 费用: 5.00
 2024-12-31 15:00:00 订单成交: 600000 数量: -100 价格: 10.12 费用: 5.00
 Algorithm Id:(AShareSimpleStrategy) completed in 1.17 seconds at 0k data points per second. Processing total of 565 data points.
+Algorithm Initialization: Algorithm.Initialize() Error: Unable to locate any exports matching the requested typeName: Akshare. Type: QuantConnect.Interfaces.IDataQueueHandler (Parameter 'typeName') Stack Trace: Unable to locate any exports matching the requested typeName: Akshare. Type: QuantConnect.Interfaces.IDataQueueHandler (Parameter 'typeName'): StackTrace: Unable to locate any exports matching the requested typeName: Akshare. Type: QuantConnect.Interfaces.IDataQueueHandler (Parameter 'typeName')
+Algorithm Initialization: Algorithm.Initialize() Error: Unable to locate any exports matching the requested typeName: Akshare. Type: QuantConnect.Interfaces.IDataQueueHandler (Parameter 'typeName') Stack Trace: Unable to locate any exports matching the requested typeName: Akshare. Type: QuantConnect.Interfaces.IDataQueueHandler (Parameter 'typeName'): StackTrace: Unable to locate any exports matching the requested typeName: Akshare. Type: QuantConnect.Interfaces.IDataQueueHandler (Parameter 'typeName')
+Algorithm Initialization: Algorithm.Initialize() Error: Unable to cast object of type 'QuantConnect.Lean.Engine.DataFeeds.Queues.Akshare' to type 'QuantConnect.Interfaces.IBrokerage'. Stack Trace: Unable to cast object of type 'QuantConnect.Lean.Engine.DataFeeds.Queues.Akshare' to type 'QuantConnect.Interfaces.IBrokerage'.: StackTrace: Unable to cast object of type 'QuantConnect.Lean.Engine.DataFeeds.Queues.Akshare' to type 'QuantConnect.Interfaces.IBrokerage'.
+Algorithm Initialization: Algorithm.Initialize() Error: Unable to cast object of type 'QuantConnect.Lean.Engine.DataFeeds.Queues.Akshare' to type 'QuantConnect.Interfaces.IBrokerage'. Stack Trace: Unable to cast object of type 'QuantConnect.Lean.Engine.DataFeeds.Queues.Akshare' to type 'QuantConnect.Interfaces.IBrokerage'.: StackTrace: Unable to cast object of type 'QuantConnect.Lean.Engine.DataFeeds.Queues.Akshare' to type 'QuantConnect.Interfaces.IBrokerage'.
+Algorithm Initialization: Paper Brokerage account base currency: USD
+During the algorithm initialization, the following exception has occurred: Error getting cash balance from brokerage: Unexpected character encountered while parsing value: C. Path '', line 0, position 0.Unexpected character encountered while parsing value: C. Path '', line 0, position 0. in Brokerage.cs:line 378 Unexpected character encountered while parsing value: C. Path '', line 0, position 0.: StackTrace: Unexpected character encountered while parsing value: C. Path '', line 0, position 0. in Brokerage.cs:line 378 Unexpected character encountered while parsing value: C. Path '', line 0, position 0.
+2026-01-27 09:56:56 策略初始化完成 - 初始资金: 1000000
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+2025-12-28 09:57:44 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2025-12-28 09:57:44 Algorithm starting warm up...
+2025-12-28 09:57:44 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2026-01-27 09:57:44 策略初始化完成 - 初始资金: 1000000
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+2025-12-28 10:01:42 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2025-12-28 10:01:42 Algorithm starting warm up...
+2025-12-28 10:01:42 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2026-01-27 10:01:42 策略初始化完成 - 初始资金: 1000000
+2026-01-27 10:01:44 Algorithm finished warming up.
+Algorithm Stopped
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+2025-12-28 10:16:58 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2025-12-28 10:16:58 Algorithm starting warm up...
+2025-12-28 10:16:58 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2026-01-27 10:16:58 策略初始化完成 - 初始资金: 1000000
+2026-01-27 10:16:59 Algorithm finished warming up.
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+2025-12-28 10:31:40 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2025-12-28 10:31:40 Algorithm starting warm up...
+2025-12-28 10:31:40 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2026-01-27 10:31:40 策略初始化完成 - 初始资金: 1000000
+2026-01-27 10:31:41 Algorithm finished warming up.
+Algorithm Stopped

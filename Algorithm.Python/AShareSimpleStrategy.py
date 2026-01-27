@@ -89,6 +89,9 @@ class AShareSimpleStrategy(AShareBaseStrategy):
         price_000001 = data["000001"].Price
         price_600000 = data["600000"].Price
 
+        # 标记是否有交易信号
+        has_signal = False
+
         # 检查是否已投资
         if not self.Portfolio.Invested:
             # 第一次买入 - 买入100股（A股最小交易单位）
@@ -98,6 +101,8 @@ class AShareSimpleStrategy(AShareBaseStrategy):
 
             self._record_trading_signal("600000", "买入", 100, price_600000)
             self.MarketOrder("600000", 100)
+
+            has_signal = True
 
         else:
             # 检查持仓
@@ -110,21 +115,61 @@ class AShareSimpleStrategy(AShareBaseStrategy):
                 if holdings_000001.UnrealizedProfitPercent > 0.03:
                     self._record_trading_signal("000001", "卖出", 100, price_000001)
                     self.MarketOrder("000001", -100)
+                    has_signal = True
 
                 # 如果跌幅超过3%，补仓
                 elif holdings_000001.UnrealizedProfitPercent < -0.03:
                     self._record_trading_signal("000001", "买入", 100, price_000001)
                     self.MarketOrder("000001", 100)
+                    has_signal = True
 
             # 600000同样逻辑
             if holdings_600000.Invested:
                 if holdings_600000.UnrealizedProfitPercent > 0.03:
                     self._record_trading_signal("600000", "卖出", 100, price_600000)
                     self.MarketOrder("600000", -100)
+                    has_signal = True
 
                 elif holdings_600000.UnrealizedProfitPercent < -0.03:
                     self._record_trading_signal("600000", "买入", 100, price_600000)
                     self.MarketOrder("600000", 100)
+                    has_signal = True
+
+        # 如果没有交易信号，输出资产明细
+        if not has_signal:
+            self._log_no_signal_and_portfolio(price_000001, price_600000)
+
+    def _log_no_signal_and_portfolio(self, price_000001, price_600000):
+        """输出无交易信号和资产明细"""
+        # 输出无交易信号提示
+        self.Log("=" * 60)
+        self.Log("【无交易信号】市场条件不符合交易策略")
+        self.Log("=" * 60)
+
+        # 输出资产明细
+        total_portfolio_value = self.Portfolio.TotalPortfolioValue
+        total_cash = self.Portfolio.Cash
+        total_holdings_value = total_portfolio_value - total_cash
+
+        self.Log(f"【资产明细】总资产: {total_portfolio_value:.2f} CNY")
+        self.Log(f"  - 可用资金: {total_cash:.2f} CNY")
+        self.Log(f"  - 持仓市值: {total_holdings_value:.2f} CNY")
+        self.Log(f"  - 总盈亏: {self.Portfolio.TotalPortfolioValue - self.Portfolio.TotalCashBookValue:.2f} CNY")
+
+        # 输出各股票持仓情况
+        for symbol in ["000001", "600000"]:
+            holding = self.Portfolio[symbol]
+            if holding.Invested:
+                self.Log(f"  - {symbol}: 持仓 {holding.Quantity} 股, "
+                        f"成本价 {holding.AveragePrice:.2f}, "
+                        f"现价 {holding.Price:.2f}, "
+                        f"盈亏 {holding.UnrealizedProfitPercent*100:.2f}%")
+            else:
+                self.Log(f"  - {symbol}: 无持仓")
+
+        # 输出当前市场价格
+        self.Log(f"【市场价格】000001: {price_000001:.2f}, 600000: {price_600000:.2f}")
+        self.Log("=" * 60)
 
     def OnOrderEvent(self, orderEvent):
         """
