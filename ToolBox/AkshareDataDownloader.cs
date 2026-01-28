@@ -75,53 +75,129 @@ namespace QuantConnect.ToolBox
                 Initialize();
             }
 
-            Log.Trace($"AkshareDataDownloader.Download: 开始下载 {symbol} 数据 ({startDate:yyyy-MM-dd} 至 {endDate:yyyy-MM-dd})");
+            Console.WriteLine($"[下载] {symbol} ({startDate:yyyy-MM-dd} 至 {endDate:yyyy-MM-dd})");
 
-            try
+            const int maxRetries = 3;
+            for (int retry = 0; retry <= maxRetries; retry++)
             {
-                using (Py.GIL())
+                try
                 {
-                    // 调用akshare接口获取股票数据
-                    // akshare.stock_zh_a_hist(symbol="000001", period="daily", start_date="20100101", end_date="20100131", adjust="qfq")
-                    var df = _akshare.stock_zh_a_hist(
-                        symbol: symbol,
-                        period: "daily",
-                        start_date: startDate.ToString("yyyyMMdd"),
-                        end_date: endDate.ToString("yyyyMMdd"),
-                        adjust: adjust
-                    );
-
-                    // 检查数据是否为空
-                    long rowCount = _pd.DataFrame.len(df);
-                    if (rowCount == 0)
+                    using (Py.GIL())
                     {
-                        Log.Trace($"AkshareDataDownloader.Download: {symbol} 没有数据");
+                        Console.Write("  正在获取数据");
+                        ShowProgress(0);
+
+                        var df = _akshare.stock_zh_a_hist(
+                            symbol: symbol,
+                            period: "daily",
+                            start_date: startDate.ToString("yyyyMMdd"),
+                            end_date: endDate.ToString("yyyyMMdd"),
+                            adjust: adjust
+                        );
+
+                        ShowProgress(50);
+
+                        long rowCount = _pd.DataFrame.len(df);
+                        if (rowCount == 0)
+                        {
+                            Console.WriteLine();
+                            Log.Trace($"AkshareDataDownloader.Download: {symbol} 没有数据");
+                            Console.WriteLine($"  ⚠️  警告: {symbol} 在指定日期范围内没有数据");
+                            return;
+                        }
+
+                        Console.WriteLine();
+                        Console.WriteLine($"  ✓ 获取到 {rowCount} 条数据");
+
+                        var symbolDir = Path.Combine(outputDirectory, "daily", symbol);
+                        if (!Directory.Exists(symbolDir))
+                        {
+                            Directory.CreateDirectory(symbolDir);
+                        }
+
+                        var outputFile = Path.Combine(symbolDir, $"{startDate:yyyyMMdd}_{endDate:yyyyMMdd}_tradebar.csv");
+
+                        Console.Write("  正在转换格式");
+                        ConvertToLeanFormat(df, outputFile, symbol, rowCount);
+                        Console.WriteLine();
+
+                        Console.WriteLine($"  ✅ 成功保存到: {outputFile}");
+                        Log.Trace($"AkshareDataDownloader.Download: {symbol} 数据已保存到 {outputFile}");
                         return;
                     }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine();
+                    var errorType = GetErrorType(ex);
+                    var suggestion = GetErrorSuggestion(errorType);
 
-                    Log.Trace($"AkshareDataDownloader.Download: {symbol} 获取到 {rowCount} 条数据");
-
-                    // 创建输出目录
-                    var symbolDir = Path.Combine(outputDirectory, "daily", symbol);
-                    if (!Directory.Exists(symbolDir))
+                    if (retry < maxRetries)
                     {
-                        Directory.CreateDirectory(symbolDir);
+                        Console.WriteLine($"  ⚠️  {errorType}: {ex.Message}");
+                        if (!string.IsNullOrEmpty(suggestion))
+                        {
+                            Console.WriteLine($"      建议: {suggestion}");
+                        }
+                        Console.WriteLine($"      正在重试 ({retry + 1}/{maxRetries})...");
+                        System.Threading.Thread.Sleep(2000);
                     }
-
-                    // 生成输出文件名
-                    var outputFile = Path.Combine(symbolDir, $"{startDate:yyyyMMdd}_{endDate:yyyyMMdd}_tradebar.csv");
-
-                    // 转换并保存为LEAN CSV格式
-                    ConvertToLeanFormat(df, outputFile, symbol);
-
-                    Log.Trace($"AkshareDataDownloader.Download: {symbol} 数据已保存到 {outputFile}");
+                    else
+                    {
+                        Console.WriteLine($"  ❌ 下载失败: {errorType}");
+                        Console.WriteLine($"      错误详情: {ex.Message}");
+                        if (!string.IsNullOrEmpty(suggestion))
+                        {
+                            Console.WriteLine($"      建议: {suggestion}");
+                        }
+                        Log.Error($"AkshareDataDownloader.Download: 下载失败 - {ex.Message}");
+                        throw;
+                    }
                 }
             }
-            catch (Exception ex)
+        }
+
+        private void ShowProgress(int percent)
+        {
+            const int barLength = 30;
+            int filled = (int)(barLength * percent / 100.0);
+            var bar = new string('█', filled) + new string('░', barLength - filled);
+            Console.Write($" [{bar}] {percent}%\r");
+        }
+
+        private string GetErrorType(Exception ex)
+        {
+            var message = ex.Message.ToLower();
+            if (message.Contains("connection") && message.Contains("aborted"))
+                return "网络连接中断";
+            if (message.Contains("timeout"))
+                return "请求超时";
+            if (message.Contains("remote end closed"))
+                return "服务器关闭连接";
+            if (message.Contains("403") || message.Contains("forbidden"))
+                return "访问被拒绝(403)";
+            if (message.Contains("429") || message.Contains("too many"))
+                return "请求过于频繁(429)";
+            if (message.Contains("500") || message.Contains("internal server"))
+                return "服务器内部错误(500)";
+            if (message.Contains("no module") || message.Contains("import"))
+                return "Python模块缺失";
+            return "未知错误";
+        }
+
+        private string GetErrorSuggestion(string errorType)
+        {
+            return errorType switch
             {
-                Log.Error($"AkshareDataDownloader.Download: 下载失败 - {ex.Message}");
-                throw;
-            }
+                "网络连接中断" => "检查网络连接是否稳定",
+                "请求超时" => "检查网络速度，考虑使用代理或稍后重试",
+                "服务器关闭连接" => "akshare服务可能暂时不可用，请稍后重试",
+                "访问被拒绝(403)" => "可能IP被封禁，请稍后重试或更换网络",
+                "请求过于频繁(429)" => "降低请求频率，等待一段时间后再试",
+                "服务器内部错误(500)" => "数据源服务器异常，请稍后重试",
+                "Python模块缺失" => "运行 'pip install akshare pandas numpy' 安装依赖",
+                _ => null
+            };
         }
 
         /// <summary>
@@ -130,28 +206,22 @@ namespace QuantConnect.ToolBox
         /// <param name="df">pandas DataFrame</param>
         /// <param name="outputFile">输出文件路径</param>
         /// <param name="symbol">股票代码</param>
-        private void ConvertToLeanFormat(dynamic df, string outputFile, string symbol)
+        /// <param name="totalRows">总行数（用于进度显示）</param>
+        private void ConvertToLeanFormat(dynamic df, string outputFile, string symbol, long totalRows)
         {
-            // LEAN CSV格式: date,time,open,high,low,close,volume
-            // akshare返回的列: 日期, 开盘, 最高, 最低, 收盘, 成交量, ...
-
             using (var writer = new StreamWriter(outputFile))
             {
-                // 写入CSV头
                 writer.WriteLine("date,time,open,high,low,close,volume");
 
-                // 遍历DataFrame的每一行
                 using (Py.GIL())
                 {
-                    // 获取行数
                     long rowCount = _pd.DataFrame.len(df);
+                    int lastPercent = 0;
 
                     for (long i = 0; i < rowCount; i++)
                     {
-                        // 获取第i行
                         var row = _pd.DataFrame.iloc(df, new PyTuple(new PyObject[] { i.ToPython() }));
 
-                        // 提取数据
                         var dateStr = row.GetAttr("日期").ToString();
                         var open = row.GetAttr("开盘").ToString();
                         var high = row.GetAttr("最高").ToString();
@@ -159,19 +229,25 @@ namespace QuantConnect.ToolBox
                         var close = row.GetAttr("收盘").ToString();
                         var volume = row.GetAttr("成交量").ToString();
 
-                        // 解析日期
                         if (DateTime.TryParseExact(dateStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime date))
                         {
-                            // LEAN格式: date,time,open,high,low,close,volume
-                            // time使用235959表示日终
                             var line = $"{date:yyyyMMdd},235900,{open},{high},{low},{close},{volume}";
                             writer.WriteLine(line);
+
+                            int currentPercent = (int)((i + 1) * 100 / rowCount);
+                            if (currentPercent > lastPercent && currentPercent % 10 == 0)
+                            {
+                                ShowProgress(currentPercent);
+                                lastPercent = currentPercent;
+                            }
                         }
                         else
                         {
                             Log.Trace($"AkshareDataDownloader.ConvertToLeanFormat: 无法解析日期 {dateStr}");
                         }
                     }
+
+                    ShowProgress(100);
                 }
             }
 
@@ -187,13 +263,18 @@ namespace QuantConnect.ToolBox
         /// <param name="outputDirectory">输出目录</param>
         public void DownloadBatch(string[] symbols, DateTime startDate, DateTime endDate, string outputDirectory)
         {
-            Log.Trace($"AkshareDataDownloader.DownloadBatch: 开始批量下载 {symbols.Length} 只股票");
+            Console.WriteLine($"\n[批量下载] 共 {symbols.Length} 只股票");
+            Console.WriteLine($"日期范围: {startDate:yyyy-MM-dd} 至 {endDate:yyyy-MM-dd}");
+            Console.WriteLine(new string('-', 60));
 
             int successCount = 0;
             int failCount = 0;
 
-            foreach (var symbol in symbols)
+            for (int i = 0; i < symbols.Length; i++)
             {
+                var symbol = symbols[i];
+                Console.WriteLine($"\n[{i + 1}/{symbols.Length}] {symbol}");
+
                 try
                 {
                     Download(symbol, startDate, endDate, outputDirectory);
@@ -201,10 +282,28 @@ namespace QuantConnect.ToolBox
                 }
                 catch (Exception ex)
                 {
+                    Console.WriteLine($"  ❌ 失败: {ex.Message}");
                     Log.Error($"AkshareDataDownloader.DownloadBatch: {symbol} 下载失败 - {ex.Message}");
                     failCount++;
                 }
+
+                if (i < symbols.Length - 1)
+                {
+                    Console.Write("  等待1秒避免请求过快...");
+                    System.Threading.Thread.Sleep(1000);
+                    Console.WriteLine(" 完成");
+                }
             }
+
+            Console.WriteLine();
+            Console.WriteLine(new string('=', 60));
+            Console.WriteLine($"批量下载完成:");
+            Console.WriteLine($"  ✅ 成功: {successCount}/{symbols.Length}");
+            if (failCount > 0)
+            {
+                Console.WriteLine($"  ❌ 失败: {failCount}/{symbols.Length}");
+            }
+            Console.WriteLine(new string('=', 60));
 
             Log.Trace($"AkshareDataDownloader.DownloadBatch: 批量下载完成 - 成功: {successCount}, 失败: {failCount}");
         }

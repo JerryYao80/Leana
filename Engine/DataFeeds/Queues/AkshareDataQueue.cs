@@ -50,6 +50,11 @@ namespace QuantConnect.Lean.Engine.DataFeeds.Queues
         private bool _initialized = false;
         private bool _disposed = false;
 
+        // 重试配置
+        private const int MaxRetries = 3;
+        private const int RetryDelayMs = 2000;
+        private int _consecutiveFailures = 0;
+
         /// <summary>
         /// 数据获取间隔（毫秒）
         /// 默认300秒（5分钟），防止被封锁IP
@@ -198,79 +203,129 @@ namespace QuantConnect.Lean.Engine.DataFeeds.Queues
 
             Log.Trace("AkshareDataQueue.FetchLatestData: 开始获取实时数据");
 
-            using (Py.GIL())
+            for (int retry = 0; retry <= MaxRetries; retry++)
             {
                 try
                 {
-                    // 调用akshare获取实时行情
-                    // stock_zh_a_spot_em(): 获取A股实时行情数据
-                    var df = _akshare.stock_zh_a_spot_em();
-
-                    // 检查数据是否为空 - 使用 Python 内置的 len() 函数
-                    PyObject lenFunc = _pd.Builtins.len();
-                    long rowCount = lenFunc.Invoke(df).As<long>();
-                    if (rowCount == 0)
+                    using (Py.GIL())
                     {
-                        Log.Trace("AkshareDataQueue.FetchLatestData: 没有获取到实时数据");
-                        return;
-                    }
+                        var df = _akshare.stock_zh_a_spot_em();
 
-                    // 遍历数据，更新订阅的股票
-                    for (long i = 0; i < rowCount; i++)
-                    {
-                        var row = _pd.DataFrame.iloc(df, new PyTuple(new PyObject[] { i.ToPython() }));
-
-                        // 提取股票代码
-                        var code = row.GetAttr("代码").ToString();
-                        var symbol = GetSymbol(code);
-
-                        // 检查是否订阅了该股票
-                        if (symbol == null)
+                        PyObject lenFunc = _pd.Builtins.len();
+                        long rowCount = lenFunc.Invoke(df).As<long>();
+                        if (rowCount == 0)
                         {
-                            continue;
+                            Log.Trace("AkshareDataQueue.FetchLatestData: 没有获取到实时数据");
+                            return;
                         }
 
-                        lock (_lock)
+                        for (long i = 0; i < rowCount; i++)
                         {
-                            if (!_subscriptions.ContainsKey(symbol))
+                            var row = _pd.DataFrame.iloc(df, new PyTuple(new PyObject[] { i.ToPython() }));
+                            var code = row.GetAttr("代码").ToString();
+                            var symbol = GetSymbol(code);
+
+                            if (symbol == null)
                             {
                                 continue;
                             }
 
-                            // 提取行情数据
-                            var price = decimal.Parse(row.GetAttr("最新价").ToString(), System.Globalization.CultureInfo.InvariantCulture);
-                            var volume = decimal.Parse(row.GetAttr("成交量").ToString(), System.Globalization.CultureInfo.InvariantCulture);
-                            var bidPrice = decimal.Parse(row.GetAttr("买一价").ToString(), System.Globalization.CultureInfo.InvariantCulture);
-                            var askPrice = decimal.Parse(row.GetAttr("卖一价").ToString(), System.Globalization.CultureInfo.InvariantCulture);
-
-                            // 创建Tick对象
-                            var tick = new Tick
+                            lock (_lock)
                             {
-                                Symbol = symbol,
-                                Time = DateTime.UtcNow,
-                                Value = price,
-                                Quantity = volume,
-                                BidPrice = bidPrice,
-                                AskPrice = askPrice,
-                                TickType = TickType.Trade,
-                                DataType = MarketDataType.Tick
-                            };
+                                if (!_subscriptions.ContainsKey(symbol))
+                                {
+                                    continue;
+                                }
 
-                            // 更新最新数据
-                            _latestData[symbol].Clear();
-                            _latestData[symbol].Add(tick);
+                                var price = decimal.Parse(row.GetAttr("最新价").ToString(), System.Globalization.CultureInfo.InvariantCulture);
+                                var volume = decimal.Parse(row.GetAttr("成交量").ToString(), System.Globalization.CultureInfo.InvariantCulture);
+                                var bidPrice = decimal.Parse(row.GetAttr("买一价").ToString(), System.Globalization.CultureInfo.InvariantCulture);
+                                var askPrice = decimal.Parse(row.GetAttr("卖一价").ToString(), System.Globalization.CultureInfo.InvariantCulture);
 
-                            Log.Trace($"AkshareDataQueue.FetchLatestData: {symbol} 价格={price}, 成交量={volume}");
+                                var tick = new Tick
+                                {
+                                    Symbol = symbol,
+                                    Time = DateTime.UtcNow,
+                                    Value = price,
+                                    Quantity = volume,
+                                    BidPrice = bidPrice,
+                                    AskPrice = askPrice,
+                                    TickType = TickType.Trade,
+                                    DataType = MarketDataType.Tick
+                                };
+
+                                _latestData[symbol].Clear();
+                                _latestData[symbol].Add(tick);
+
+                                Log.Trace($"AkshareDataQueue.FetchLatestData: {symbol} 价格={price}, 成交量={volume}");
+                            }
                         }
-                    }
 
-                    Log.Trace($"AkshareDataQueue.FetchLatestData: 已更新 {_latestData.Count} 只股票的实时数据");
+                        Log.Trace($"AkshareDataQueue.FetchLatestData: 已更新 {_latestData.Count} 只股票的实时数据");
+                        _consecutiveFailures = 0;
+                        return;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Log.Error($"AkshareDataQueue.FetchLatestData: 获取数据时出错 - {ex.Message}");
+                    _consecutiveFailures++;
+                    var errorType = GetErrorType(ex);
+                    var errorMessage = GetDetailedErrorMessage(ex, errorType);
+
+                    if (retry < MaxRetries)
+                    {
+                        Log.Trace($"AkshareDataQueue.FetchLatestData: {errorMessage}，{RetryDelayMs}ms后重试 ({retry + 1}/{MaxRetries})");
+                        System.Threading.Thread.Sleep(RetryDelayMs);
+                    }
+                    else
+                    {
+                        Log.Error($"AkshareDataQueue.FetchLatestData: {errorMessage}，已重试{MaxRetries}次，全部失败");
+                        
+                        if (_consecutiveFailures >= 3)
+                        {
+                            Log.Error($"AkshareDataQueue.FetchLatestData: 连续{_consecutiveFailures}次获取数据失败，建议检查网络连接或akshare服务状态");
+                        }
+                    }
                 }
             }
+        }
+
+        private string GetErrorType(Exception ex)
+        {
+            var message = ex.Message.ToLower();
+            if (message.Contains("connection") && message.Contains("aborted"))
+                return "网络连接中断";
+            if (message.Contains("timeout"))
+                return "请求超时";
+            if (message.Contains("remote end closed"))
+                return "服务器关闭连接";
+            if (message.Contains("403") || message.Contains("forbidden"))
+                return "访问被拒绝(403)";
+            if (message.Contains("429") || message.Contains("too many"))
+                return "请求过于频繁(429)";
+            if (message.Contains("500") || message.Contains("internal server"))
+                return "服务器内部错误(500)";
+            return "未知错误";
+        }
+
+        private string GetDetailedErrorMessage(Exception ex, string errorType)
+        {
+            var suggestions = GetErrorSuggestion(errorType);
+            return $"{errorType} - {ex.Message}{(suggestions != null ? $" | 建议: {suggestions}" : "")}";
+        }
+
+        private string GetErrorSuggestion(string errorType)
+        {
+            return errorType switch
+            {
+                "网络连接中断" => "检查网络连接是否稳定",
+                "请求超时" => "检查网络速度，考虑增加超时时间",
+                "服务器关闭连接" => "akshare服务可能不可用，请稍后重试",
+                "访问被拒绝(403)" => "可能IP被封禁，请稍后重试或更换网络",
+                "请求过于频繁(429)" => "降低请求频率，增加DataFetchInterval",
+                "服务器内部错误(500)" => "数据源服务器异常，请稍后重试",
+                _ => null
+            };
         }
 
         /// <summary>

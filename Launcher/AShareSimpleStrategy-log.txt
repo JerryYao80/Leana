@@ -602,3 +602,35 @@ Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
 2026-01-27 10:31:40 策略初始化完成 - 初始资金: 1000000
 2026-01-27 10:31:41 Algorithm finished warming up.
 Algorithm Stopped
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+2025-12-28 13:55:46 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2025-12-28 13:55:46 Algorithm starting warm up...
+2025-12-28 13:55:46 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2026-01-27 13:55:46 策略初始化完成 - 初始资金: 1000000
+2026-01-27 13:55:48 Algorithm finished warming up.
+Algorithm Stopped
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+2025-12-28 14:12:50 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2025-12-28 14:12:50 Algorithm starting warm up...
+2025-12-28 14:12:50 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2026-01-27 14:12:50 策略初始化完成 - 初始资金: 1000000
+2026-01-27 14:12:51 Algorithm finished warming up.
+Algorithm Stopped
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+2025-12-28 14:30:34 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2025-12-28 14:30:34 Algorithm starting warm up...
+2025-12-28 14:30:34 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2026-01-27 14:30:34 策略初始化完成 - 初始资金: 1000000
+2026-01-27 14:30:35 Algorithm finished warming up.
+Algorithm Stopped
+Algorithm Initialization: Paper Brokerage account base currency: USD
+Launching analysis for AShareSimpleStrategy with LEAN Engine v2.5.0.0
+2025-12-29 09:33:41 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2025-12-29 09:33:41 Algorithm starting warm up...
+2025-12-29 09:33:41 Usage of QCAlgorithm.OnEndOfDay() without a symbol will be deprecated August 2021. Always use a symbol when overriding this method: OnEndOfDay(symbol)
+2026-01-28 09:33:41 策略初始化完成 - 初始资金: 1000000
+2026-01-28 09:33:42 Algorithm finished warming up.
+Algorithm Stopped
