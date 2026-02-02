@@ -1,0 +1,31 @@
+{
+  "environment": "backtesting-barra-cne5",
+  "algorithm-type-name": "BarraCNE5Algorithm",
+  "algorithm-language": "Python",
+  "algorithm-location": "../Algorithm.Python/BarraCNE5Algorithm.py",
+
+  "data-folder": "/home/project/ccleana/data",
+  "python-venv": "/root/miniconda3/envs/quant311",
+
+  "description": "Barra CNE5 Factor Model Backtest Configuration",
+  "live-mode": false,
+
+  "python-additional-paths": ["../Algorithm.Python"],
+
+  "environments": {
+    "backtesting-barra-cne5": {
+      "live-mode": false,
+      "setup-handler": "QuantConnect.Lean.Engine.Setup.BacktestingSetupHandler",
+      "result-handler": "QuantConnect.Lean.Engine.Results.BacktestingResultHandler",
+      "data-feed-handler": "QuantConnect.Lean.Engine.DataFeeds.FileSystemDataFeed",
+      "real-time-handler": "QuantConnect.Lean.Engine.RealTime.BacktestingRealTimeHandler",
+      "history-provider": ["QuantConnect.Lean.Engine.HistoricalData.SubscriptionDataReaderHistoryProvider"],
+      "transaction-handler": "QuantConnect.Lean.Engine.TransactionHandlers.BacktestingTransactionHandler"
+    }
+  },
+
+  "log-handler": "QuantConnect.Logging.CompositeLogHandler",
+  "parameters": {
+    "log-process": true
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "environment": "live-paper-barra-cne5",
+  "algorithm-type-name": "BarraCNE5Algorithm",
+  "algorithm-language": "Python",
+  "algorithm-location": "../Algorithm.Python/BarraCNE5Algorithm.py",
+
+  "data-folder": "/home/project/ccleana/data",
+  "python-venv": "/root/miniconda3/envs/quant311",
+
+  "description": "Barra CNE5 Factor Model Paper Trading Configuration",
+  "live-mode": true,
+
+  "python-additional-paths": ["../Algorithm.Python"],
+
+  "environments": {
+    "live-paper-barra-cne5": {
+      "live-mode": true,
+      "live-mode-brokerage": "PaperBrokerage",
+      "setup-handler": "QuantConnect.Lean.Engine.Setup.BrokerageSetupHandler",
+      "result-handler": "QuantConnect.Lean.Engine.Results.LiveTradingResultHandler",
+      "data-feed-handler": "QuantConnect.Lean.Engine.DataFeeds.LiveTradingDataFeed",
+      "data-queue-handler": ["QuantConnect.Lean.Engine.DataFeeds.Queues.LiveDataQueue"],
+      "real-time-handler": "QuantConnect.Lean.Engine.RealTime.LiveTradingRealTimeHandler",
+      "transaction-handler": "QuantConnect.Lean.Engine.TransactionHandlers.BacktestingTransactionHandler",
+      "history-provider": ["SubscriptionDataReaderHistoryProvider"]
+    }
+  },
+
+  "log-handler": "QuantConnect.Logging.CompositeLogHandler",
+  "parameters": {
+    "log-process": true
+  }
+}
