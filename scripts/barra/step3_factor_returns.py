@@ -26,10 +26,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
+from functools import partial
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from multiprocessing import Pool, cpu_count
+import os
 
 # 配置路径
 DATA_ROOT = Path("/home/project/ccleana/data")
@@ -71,6 +74,23 @@ INDUSTRY_FACTORS = [
 
 ALL_FACTORS = STYLE_FACTORS + INDUSTRY_FACTORS
 
+# 全局缓存（用于多进程子进程）
+_GLOBAL_STOCK_PRICE_CACHE = None
+_GLOBAL_MARKET_CAP_CACHE = None
+
+
+def init_worker(stock_price_cache: Dict, market_cap_cache: Dict):
+    """
+    子进程初始���函数：接收缓存数据
+
+    Args:
+        stock_price_cache: 价格数据缓存
+        market_cap_cache: 市值数据缓存
+    """
+    global _GLOBAL_STOCK_PRICE_CACHE, _GLOBAL_MARKET_CAP_CACHE
+    _GLOBAL_STOCK_PRICE_CACHE = stock_price_cache
+    _GLOBAL_MARKET_CAP_CACHE = market_cap_cache
+
 
 def load_stock_returns(date_str: str) -> Dict[str, float]:
     """
@@ -93,12 +113,45 @@ def load_stock_returns(date_str: str) -> Dict[str, float]:
     return returns
 
 
-def load_market_caps(date_str: str, stock_codes: List[str]) -> Dict[str, float]:
+def build_market_cap_cache() -> Dict[str, pd.DataFrame]:
     """
-    加载指定日期的股票市值
+    构建市值数据缓存 (一次性加载所有股票市值数据)
+
+    Returns:
+        {ts_code: DataFrame} 字典
+    """
+    cache = {}
+    basic_dir = TUSHARE_DATA_DIR / "daily_basic"
+    if not basic_dir.exists():
+        return cache
+
+    stock_dirs = list(basic_dir.iterdir())
+    logger.info(f"开始构建市值缓存，共 {len(stock_dirs)} 只股票...")
+
+    for stock_dir in tqdm(stock_dirs, desc="加载市值数据"):
+        if stock_dir.is_dir():
+            ts_code = stock_dir.name.replace('date=', '')
+            try:
+                path = stock_dir / "data.parquet"
+                if path.exists():
+                    df = pd.read_parquet(path)
+                    df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
+                    cache[ts_code] = df
+            except:
+                pass
+
+    logger.info(f"市值缓存构建完成，共 {len(cache)} 只股票")
+    return cache
+
+
+def get_market_caps_for_date(date_str: str, market_cap_cache: Dict[str, pd.DataFrame],
+                              stock_codes: List[str]) -> Dict[str, float]:
+    """
+    从缓存中获取指定日期的股票市值
 
     Args:
         date_str: 日期字符串 (YYYYMMDD)
+        market_cap_cache: 市值缓存字典
         stock_codes: 股票代码列表
 
     Returns:
@@ -108,22 +161,14 @@ def load_market_caps(date_str: str, stock_codes: List[str]) -> Dict[str, float]:
     date_dt = pd.to_datetime(date_str, format='%Y%m%d')
 
     for ts_code in stock_codes:
-        try:
-            path = TUSHARE_DATA_DIR / "daily_basic" / f"date={ts_code}" / "data.parquet"
-            if not path.exists():
-                continue
-
-            df = pd.read_parquet(path)
-            df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
-
-            # 找到最接近该日期的数据
-            df = df[df['trade_date'] <= date_dt].sort_values('trade_date', ascending=False)
-
-            if len(df) > 0:
-                market_caps[ts_code] = df.iloc[0]['total_mv']
-
-        except Exception:
+        if ts_code not in market_cap_cache:
             continue
+
+        df = market_cap_cache[ts_code]
+        df_filtered = df[df['trade_date'] <= date_dt].sort_values('trade_date', ascending=False)
+
+        if len(df_filtered) > 0:
+            market_caps[ts_code] = df_filtered.iloc[0]['total_mv']
 
     return market_caps
 
@@ -201,9 +246,76 @@ def cross_sectional_regression(factor_df: pd.DataFrame,
     return factor_returns, residual_dict
 
 
+def process_single_date(args: Tuple) -> Tuple:
+    """
+    处理单个交易日的因子收益率计算（用于多进程）
+
+    Args:
+        args: (date_str, date_file_path) 元组
+
+    Returns:
+        (date_str, factor_returns_list, residuals_list, status)
+        status: 0=成功, 1=数据不足, 2=失败
+    """
+    date_str, date_file_path = args
+
+    try:
+        # 加载因子数据
+        factor_df = pd.read_parquet(date_file_path)
+
+        # 从全局缓存获取数据
+        global _GLOBAL_STOCK_PRICE_CACHE, _GLOBAL_MARKET_CAP_CACHE
+        stock_price_cache = _GLOBAL_STOCK_PRICE_CACHE
+        market_cap_cache = _GLOBAL_MARKET_CAP_CACHE
+
+        if stock_price_cache is None or market_cap_cache is None:
+            return (date_str, None, None, 2)  # 缓存未初始化
+
+        # 计算股票收益率
+        stock_returns = {}
+        for ts_code in factor_df['ts_code'].values:
+            if ts_code in stock_price_cache:
+                price_df = stock_price_cache[ts_code]
+                target_date = pd.to_datetime(date_str, format='%Y%m%d')
+                price_df_filtered = price_df[price_df['trade_date'] <= target_date].sort_values('trade_date', ascending=False)
+                if len(price_df_filtered) > 0:
+                    stock_returns[ts_code] = price_df_filtered.iloc[0]['pct_chg']
+
+        if len(stock_returns) < 50:
+            return (date_str, None, None, 1)  # 数据不足
+
+        # 构建收益率DataFrame
+        returns_df = pd.DataFrame([
+            {'ts_code': k, 'return': v}
+            for k, v in stock_returns.items()
+        ])
+
+        # 从缓存获取市值数据
+        market_caps = get_market_caps_for_date(date_str, market_cap_cache, factor_df['ts_code'].tolist())
+
+        # 横截面回归
+        factor_returns, residuals = cross_sectional_regression(
+            factor_df, returns_df, market_caps
+        )
+
+        # 构建残差列表（使用基本类型，确保可以pickle序列化）
+        residual_list = [
+            {'trade_date': date_str, 'ts_code': ts_code, 'residual': float(resid)}
+            for ts_code, resid in residuals.items()
+        ]
+
+        # 将numpy数组转换为列表
+        factor_returns_list = [float(x) for x in factor_returns]
+
+        return (date_str, factor_returns_list, residual_list, 0)
+
+    except Exception:
+        return (date_str, None, None, 2)  # 失败
+
+
 def calculate_factor_returns() -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    计算所有交易日的因子收益率
+    计算所有交易日的因子收益率（使用多进程并行）
 
     Returns:
         (factor_returns_df, residuals_df)
@@ -214,79 +326,63 @@ def calculate_factor_returns() -> Tuple[pd.DataFrame, pd.DataFrame]:
     date_files = sorted(FACTOR_DATA_DIR.glob("*.parquet"))
     logger.info(f"找到 {len(date_files)} 个交易日文件")
 
-    # 收集结果
-    all_factor_returns = []
-    all_residuals = []
+    # 确定使用的CPU核心数
+    n_cores = min(cpu_count(), 4)  # 最多使用4核
+    logger.info(f"检测到系统有 {cpu_count()} 个CPU核心，将使用 {n_cores} 个核心进行并行计算")
 
-    # 首先构建一个股票价格数据缓存，用于计算收益率
+    # 1. 构建股票价格数据缓存（加载所有股票）
     logger.info("构建股票价格数据缓存...")
     stock_price_cache = {}
     daily_dir = TUSHARE_DATA_DIR / "daily"
     if daily_dir.exists():
-        stock_dirs = list(daily_dir.iterdir())[:1000]  # 限制数量避免内存溢出
+        stock_dirs = [d for d in daily_dir.iterdir() if d.is_dir()]
+        logger.info(f"发现 {len(stock_dirs)} 只股票目录")
         for stock_dir in tqdm(stock_dirs, desc="缓存价格数据"):
-            if stock_dir.is_dir():
-                ts_code = stock_dir.name.replace('date=', '')
-                try:
-                    df = pd.read_parquet(stock_dir / "data.parquet")
-                    df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
-                    stock_price_cache[ts_code] = df[['trade_date', 'close', 'pct_chg']].copy()
-                except:
-                    pass
+            ts_code = stock_dir.name.replace('date=', '')
+            try:
+                df = pd.read_parquet(stock_dir / "data.parquet")
+                df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
+                stock_price_cache[ts_code] = df[['trade_date', 'close', 'pct_chg']].copy()
+            except:
+                pass
 
-    logger.info(f"缓存了 {len(stock_price_cache)} 只股票的价格数据")
+    logger.info(f"成功缓存 {len(stock_price_cache)} 只股票的价格数据")
 
-    # 逐日处理
+    # 2. 构建市值数据缓存（一次性加载所有股票市值）
+    market_cap_cache = build_market_cap_cache()
+
+    # 3. 准备任务参数
+    tasks = [(f.stem, f) for f in date_files]
+
+    # 4. 使用多进程池并行处理
+    all_factor_returns = []
+    all_residuals = []
+    insufficient_data_count = 0
     failed_dates = []
 
-    for date_file in tqdm(date_files, desc="计算因子收益率"):
-        date_str = date_file.stem
-        try:
-            # 加载因子数据
-            factor_df = pd.read_parquet(date_file)
+    logger.info(f"开始并行处理 {len(tasks)} 个交易日...")
 
-            # 计算股票收益率
-            stock_returns = {}
-            for ts_code in factor_df['ts_code'].values:
-                if ts_code in stock_price_cache:
-                    price_df = stock_price_cache[ts_code]
-                    # 找到最接近该日期的收益率
-                    target_date = pd.to_datetime(date_str, format='%Y%m%d')
-                    price_df = price_df[price_df['trade_date'] <= target_date].sort_values('trade_date', ascending=False)
-                    if len(price_df) > 0:
-                        stock_returns[ts_code] = price_df.iloc[0]['pct_chg']
+    with Pool(
+        processes=n_cores,
+        initializer=init_worker,
+        initargs=(stock_price_cache, market_cap_cache)
+    ) as pool:
+        # 使用 imap_unordered 以便实时显示进度
+        results = list(tqdm(
+            pool.imap_unordered(process_single_date, tasks),
+            total=len(tasks),
+            desc=f"计算因子收益率 [{n_cores}核并行]"
+        ))
 
-            if not stock_returns:
-                continue
-
-            # 构建收益率DataFrame
-            returns_df = pd.DataFrame([
-                {'ts_code': k, 'return': v}
-                for k, v in stock_returns.items()
-            ])
-
-            # 加载市值数据
-            market_caps = load_market_caps(date_str, factor_df['ts_code'].tolist())
-
-            # 横截面回归
-            factor_returns, residuals = cross_sectional_regression(
-                factor_df, returns_df, market_caps
-            )
-
-            # 保存因子收益率
-            all_factor_returns.append([date_str] + factor_returns.tolist())
-
-            # 保存残差
-            for ts_code, resid in residuals.items():
-                all_residuals.append({
-                    'trade_date': date_str,
-                    'ts_code': ts_code,
-                    'residual': resid
-                })
-
-        except Exception as e:
-            failed_dates.append((date_str, str(e)))
-            logger.warning(f"处理日期 {date_str} 失败: {e}")
+    # 5. 收集结果
+    for date_str, factor_returns, residuals, status in results:
+        if status == 0:  # 成功
+            all_factor_returns.append([date_str] + factor_returns)
+            all_residuals.extend(residuals)
+        elif status == 1:  # 数据不足
+            insufficient_data_count += 1
+        else:  # 失败
+            failed_dates.append(date_str)
 
     # 构建因子收益率DataFrame
     factor_returns_df = pd.DataFrame(
@@ -302,7 +398,8 @@ def calculate_factor_returns() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     logger.info(f"成功计算 {len(factor_returns_df)} 个交易日的因子收益率")
     logger.info(f"共 {len(residuals_df)} 条残差记录")
-
+    if insufficient_data_count > 0:
+        logger.warning(f"因数据不足跳过的日期数: {insufficient_data_count}")
     if failed_dates:
         logger.warning(f"失败日期数: {len(failed_dates)}")
 
