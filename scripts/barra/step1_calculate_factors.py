@@ -14,7 +14,7 @@ Barra CNE5 因子计算脚本 - Step 1: 计算因子暴露矩阵
 输入:
     /data/tushare_data/daily/{ts_code}.parquet
     /data/tushare_data/daily_basic/{ts_code}.parquet
-    /data/tushare_data/sw_daily/data.parquet (基准: 801300.SI)
+    /home/project/tushare-downloader/tushare_data/index_daily/ts_code=000300.SH/data.parquet (基准: 000300.SH)
     /data/tushare_data/stock_basic/data.parquet
 
 输出:
@@ -151,7 +151,7 @@ class FactorCalculator:
         初始化因子计算器
 
         Args:
-            benchmark_data: 基准指数数据 (801300.SI 沪深300)
+            benchmark_data: 基准指数数据 (000300.SH 沪深300)
         """
         self.benchmark_data = benchmark_data
         self.stock_basic = self._load_stock_basic()
@@ -398,22 +398,15 @@ class FactorCalculator:
 
 
 def load_benchmark_data() -> pd.DataFrame:
-    """加载基准指数数据 (沪深300: 801300.SI)"""
-    path = TUSHARE_DATA_DIR / "sw_daily" / "year=2020" / "data.parquet"
+    """加载基准指数数据 (沪深300: 000300.SH)"""
+    # 从新的沪深300指数数据路径加载
+    path = Path("/home/project/tushare-downloader/tushare_data/index_daily/ts_code=000300.SH/data.parquet")
 
-    # 尝试从多个年份加载数据
-    dfs = []
-    for year in range(2019, 2026):
-        path = TUSHARE_DATA_DIR / "sw_daily" / f"year={year}" / "data.parquet"
-        if path.exists():
-            df = pd.read_parquet(path)
-            df = df[df['ts_code'] == '801300.SI'].copy()
-            dfs.append(df)
-
-    if dfs:
-        benchmark = pd.concat(dfs, ignore_index=True)
-        benchmark['trade_date'] = pd.to_datetime(benchmark['trade_date'], format='%Y%m%d')
-        return benchmark.sort_values('trade_date').reset_index(drop=True)
+    if path.exists():
+        df = pd.read_parquet(path)
+        # 重命名列以保持兼容性 (如果需要)
+        df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
+        return df.sort_values('trade_date').reset_index(drop=True)
 
     logger.warning("未找到基准指数数据，Beta因子将使用默认值1.0")
     return pd.DataFrame()
